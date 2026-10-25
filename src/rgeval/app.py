@@ -3,7 +3,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import JSONResponse
 import shutil
 from pathlib import Path
-from evalExec import evaluate_graphql_accuracy
+from .evalExec import evaluate_graphql_accuracy
 
 app = FastAPI(title="GraphQL Accuracy API")
 

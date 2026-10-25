@@ -1,7 +1,7 @@
 import pandas as pd
 import json
 import os
-from compare_utils import compare_query_evaluation
+from .compare_utils import compare_query_evaluation
 
 def evaluate_graphql_accuracy(input_file: str, output_dir: str = "test_output_files") -> dict:
    
@@ -101,5 +101,9 @@ def evaluate_graphql_accuracy(input_file: str, output_dir: str = "test_output_fi
     return metrics
 
 if __name__ == "__main__":
-    path = 'test_input_files/Test_set_v14_GraphQL_granite-20b-code-instruct-v2_1_Full.xlsx'
+    import sys
+
+    if len(sys.argv) != 2:
+        sys.exit("usage: python -m rgeval.evalExec <predictions.xlsx|.csv>")
+    path = sys.argv[1]
     evaluate_graphql_accuracy(path)

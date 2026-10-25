@@ -1,37 +1,48 @@
-# NL2GraphQL Bench: evaluation
+# rgeval
 
-RGEval, the scorer behind the [NL2GraphQL Bench
-leaderboard](https://nl2graphql-bench.github.io/).
+Semantic-equivalence scoring for generated GraphQL queries. The scorer behind
+the [NL2GraphQL Bench leaderboard](https://nl2graphql-bench.github.io/).
 
-A generated GraphQL query can be correct without matching the reference string:
+A generated GraphQL query can be correct without matching the reference text:
 field order varies, aliases rename things, fragments can be inlined. RGEval
-compares the two queries as graphs after normalising them against the schema, so
-it scores semantic equivalence rather than text.
-
-## How scoring works
-
-Each query is parsed and validated against its schema, normalised, converted to
-a graph, reduced, and then compared. A query that fails any stage scores 0.
-
-| stage | module |
-|---|---|
-| parse + validate against the schema | `pipeline/AST.py` |
-| AST normalisation | `pipeline/normalizeAST.py` |
-| graph construction | `pipeline/graphNet.py` |
-| cycle handling | `pipeline/cycles.py` |
-| reduction | `pipeline/newRed.py` |
-| comparison | `pipeline/compare_jsons.py` |
+parses and validates both queries against the schema, normalises them, and
+compares them as graphs, so it scores meaning rather than string equality.
 
 ## Install
 
 ```bash
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
+pip install rgeval
 ```
 
-`networkx` must stay below 3.0: the graph code uses APIs removed in 3.x.
+Reading the benchmark `.xlsx` files needs the extra:
 
-## Scoring the public benchmark
+```bash
+pip install "rgeval[datasets]"
+```
+
+## Use as a library
+
+```python
+from rgeval import score_pair
+
+schema = """
+type Query { city(id: Int!): City }
+type City { id: Int! name: String population: Float }
+"""
+gold = 'query { city(id: 1) { name population } }'
+pred = 'query { city(id: 1) { population name } }'   # different field order
+
+score_pair(schema, gold, pred)        # True
+```
+
+`score_pair` returns `False` rather than raising for a query that cannot be
+parsed or does not validate against the schema: an invalid prediction scores 0.
+
+```python
+score_pair(schema, gold, pred, variables='{"cityId": 1}')
+```
+
+## Score the public benchmark
 
 Get the data from
 [nl2graphql-bench/datasets](https://github.com/nl2graphql-bench/datasets):
@@ -40,66 +51,69 @@ Get the data from
 gunzip -k test_data.jsonl.gz
 ```
 
-Each row carries the schema (`CleanSchema`), the reference query
-(`GraphQLQuery`), its variables, and category labels. Use `CleanSchema`:
-`OriginalGraphQLSchema` and `RefinedGraphQLSchema` are truncated at 32,767
-characters in some rows and will not build.
+Use the `CleanSchema` field. `OriginalGraphQLSchema` and
+`RefinedGraphQLSchema` are truncated at 32,767 characters in some rows and will
+not build.
 
-Predictions are JSONL, one object per instance, keyed by `DataID`, with the
-model output in a field starting with `pred_`:
+Predictions are JSONL, one object per instance, with the model output in a field
+starting with `pred_`:
 
 ```json
 {"id": 1, "gold": "query { ... }", "pred_mymodel": "query { ... }"}
 ```
 
-Then:
-
 ```bash
-mkdir -p 2026_input/myrun && cp predictions.jsonl 2026_input/myrun/test_main_predictions.jsonl
-PYTHONPATH=. .venv/bin/python 2026_eval.py --input_folder myrun
+mkdir -p 2026_input/myrun
+cp predictions.jsonl 2026_input/myrun/test_main_predictions.jsonl
+rgeval-score-2026 --input_folder myrun
 ```
 
 Results land in `2026_results/myrun/results.json` with an overall score and a
 per-category breakdown.
 
 Name prediction files `test_main_*` or `test_part2_*`. The scorer reads the part
-from the filename, because the two parts number their rows from 1 each and a
-`DataID` alone does not say which part a row belongs to.
+from the filename, because the two parts of the public benchmark number their
+rows from 1 each and a `DataID` alone does not say which part a row is from.
 
-## Entry points
+## How scoring works
 
-| script | purpose |
+| stage | module |
 |---|---|
-| `2026_eval.py` | score the public benchmark (`test_main`, `test_part2`) |
-| `2024_eval.py` | score the external benchmark (Kesarwani et al., 2024) |
-| `emnlp_evaluation.py` | per-model scoring over a predictions folder |
-| `claude_evaluation.py` | scoring an API model's output |
-| `clean_new_dataset.py` | repair SDL that `graphql-core` cannot build |
-| `add_clean_schema.py` | add a `CleanSchema` column to a dataset |
-| `app.py` | local UI for inspecting a scored run |
+| parse and validate against the schema | `rgeval.pipeline.AST` |
+| AST normalisation | `rgeval.pipeline.normalizeAST` |
+| graph construction | `rgeval.pipeline.graphNet` |
+| cycle handling | `rgeval.pipeline.cycles` |
+| reduction | `rgeval.pipeline.newRed` |
+| comparison | `rgeval.pipeline.compare_jsons` |
 
-## Tests
+`rgeval.score_pair` runs all six in order. Import a stage directly only to
+inspect or replace it.
 
-```bash
-EVALS_DIR=2026_evals PYTHONPATH=. .venv/bin/python test_2026_eval_split_keying.py
-```
+## Requirements
 
-Checks that each part is scored against its own schema. Needs
-`test_main_clean.xlsx` and `test_part2_clean.xlsx` in `2026_evals/`.
+Python 3.9+. `networkx` is pinned below 3.0: the graph code uses APIs removed in
+3.x.
 
 ## What is not here
 
-No datasets and no model predictions: datasets are in
-[nl2graphql-bench/datasets](https://github.com/nl2graphql-bench/datasets), and
+No datasets and no model predictions. Datasets are in
+[nl2graphql-bench/datasets](https://github.com/nl2graphql-bench/datasets);
 predictions are an input you supply.
 
 The 2,100-instance hidden benchmark is not published anywhere. It is what
 submissions are scored against, so if it were public a model could be tuned on
 it and the score would mean nothing.
 
-## Links
+## Citation
 
-- Leaderboard: https://nl2graphql-bench.github.io/
-- Datasets: https://github.com/nl2graphql-bench/datasets
-- Generation framework: https://github.com/nl2graphql-bench/generation
-- All components: https://github.com/nl2graphql-bench/index
+AutoGraphQL: A Bring-Your-Own-Schema Framework for Adapting Open-Weight LLMs to
+GraphQL APIs. EMNLP 2026, Industry Track.
+<https://openreview.net/forum?id=NcuPXBFKAO>
+
+## License
+
+See `LICENSE.txt`. It is CC BY-NC-ND 4.0, carried over from the source
+repository. That is a poor fit for an installable library (NonCommercial and
+NoDerivatives both restrict normal use of a package people run and extend) and
+differs from the MIT used by the datasets and generation components. Changing it
+is the authors' decision and is being handled separately.

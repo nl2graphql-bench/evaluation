@@ -1,13 +1,13 @@
 import os
 import csv
 import logging
-from pipeline.AST import process_queries
-from pipeline.normalizeAST import process_asts
-from pipeline.graphNet import get_graph_dict_from_ast
-from pipeline.cycles import process_graphs
-import pipeline.newRed as newRed
-from pipeline.compare_jsons import compare_leaf_nodes
-from pipeline.preProcessor import process_csv_from_preprocessed_file
+from .pipeline.AST import process_queries
+from .pipeline.normalizeAST import process_asts
+from .pipeline.graphNet import get_graph_dict_from_ast
+from .pipeline.cycles import process_graphs
+from .pipeline import newRed
+from .pipeline.compare_jsons import compare_leaf_nodes
+from .pipeline.preProcessor import process_csv_from_preprocessed_file
 import json
 import pandas as pd
 
@@ -124,4 +124,8 @@ def compare_query_evaluation(input_path):
     return df_compare
 
 if __name__ == "__main__":
-    compare_query_evaluation('test_input_files/ZeroShot_ibm_granite-20b-code-instruct-op_1164 (1).csv')
+    import sys
+
+    if len(sys.argv) != 2:
+        sys.exit("usage: python -m rgeval.compare_utils <predictions.csv>")
+    compare_query_evaluation(sys.argv[1])

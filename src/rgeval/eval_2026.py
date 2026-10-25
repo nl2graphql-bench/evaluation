@@ -3,12 +3,12 @@ import json
 import logging
 import pandas as pd
 import glob
-from pipeline.AST import process_queries
-from pipeline.normalizeAST import process_asts
-from pipeline.graphNet import get_graph_dict_from_ast
-from pipeline.cycles import process_graphs
-import pipeline.newRed as newRed
-from pipeline.compare_jsons import compare_leaf_nodes
+from .pipeline.AST import process_queries
+from .pipeline.normalizeAST import process_asts
+from .pipeline.graphNet import get_graph_dict_from_ast
+from .pipeline.cycles import process_graphs
+from .pipeline import newRed
+from .pipeline.compare_jsons import compare_leaf_nodes
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -30,10 +30,10 @@ def strip_markdown(query: str) -> str:
         cleaned_lines.append(line)
     return '\n'.join(cleaned_lines).strip()
 
-def evaluate_2024_folder(input_folder: str):
-    logger.info(f"Starting 2024 evaluation for folder: {input_folder}")
+def evaluate_2026_folder(input_folder: str):
+    logger.info(f"Starting 2026 evaluation for folder: {input_folder}")
     
-    input_dir = os.path.join("2024_input", input_folder)
+    input_dir = os.path.join("2026_input", input_folder)
     if not os.path.exists(input_dir):
         logger.error(f"Folder {input_dir} does not exist.")
         return
@@ -43,33 +43,65 @@ def evaluate_2024_folder(input_folder: str):
         logger.error(f"No jsonl files found in {input_dir}")
         return
 
-    excel_path = "2024_evals/NL2GQL_Testset_Clean.xlsx"
-    if not os.path.exists(excel_path):
-        logger.error(f"Excel file {excel_path} not found.")
-        return
-        
-    df_excel = pd.read_excel(excel_path)
+    # Gold metadata is keyed by (split, DataID), NOT DataID alone: test_main uses
+    # DataID 1..1845 and test_part2 uses 1..4558, so all 1845 test_main ids collide
+    # with a part2 id. A single flat dict let whichever file glob() returned last win
+    # for those ids, scoring test_main rows against part2 schemas, and glob() order is
+    # filesystem-dependent so the result was not reproducible across machines.
+    SPLIT_OF_XLSX = {"test_main": "test_main", "test_part2": "test_part2"}
+
+    def split_of_xlsx(path):
+        """test_main_clean.xlsx / test_part2_clean_backup.xlsx -> test_main / test_part2."""
+        name = os.path.basename(path)
+        for stem, split in SPLIT_OF_XLSX.items():
+            if name.startswith(stem):
+                return split
+        return None
+
+    def split_of_pred(path):
+        """<split>_predictions.jsonl -> <split> (the harvest naming convention)."""
+        name = os.path.basename(path)
+        for stem, split in SPLIT_OF_XLSX.items():
+            if name.startswith(stem):
+                return split
+        return None
+
+    # Prefer the CLEAN testset for each split. The 2026_evals README asks users to add
+    # the clean xlsx to this folder, which leaves the pre-clean file beside it; the clean
+    # gold is the authoritative one (it makes every gold query validate against its
+    # schema, where the pre-clean gold failed on 438/1845 test_main and 763/4558 part2).
+    def rank(path):
+        name = os.path.basename(path)
+        if "_clean_backup" in name:
+            return 0          # a backup of the PRE-clean file, lowest priority
+        if "_clean" in name:
+            return 2          # the authoritative clean gold
+        return 1              # the original
+
     excel_data = {}
-    for _, row in df_excel.iterrows():
-        schema = row.get("CleanSchema", "")
-        if pd.isna(schema): schema = ""
-        gt = str(row.get('GT_GQL', ''))
-        
-        category = 'selections'
-        if '@' in gt: category = 'directives'
-        elif row.get('mtype') == 'Yes': category = 'mutations'
-        elif row.get('frag') == 'Yes':
-            if 'fragment ' in gt: category = 'external_fragments'
-            else: category = 'inline_fragments'
-        elif row.get('filter') == 'Yes': category = 'filters'
-        elif row.get('alias') == 'Yes': category = 'aliases'
-        elif any(k in gt for k in ['first:', 'last:', 'after:', 'before:']): category = 'pagination'
-            
-        excel_data[row["Sno"]] = {
-            "CleanSchema": schema,
-            "GraphQLQueryVariables": "{}",
-            "QueryCategory": category
-        }
+    chosen = {}
+    for excel_path in sorted(glob.glob("2026_evals/*.xlsx")):
+        split = split_of_xlsx(excel_path)
+        if split is None:
+            logger.warning(f"Skipping {excel_path}: cannot tell which split it holds.")
+            continue
+        if split in chosen and rank(chosen[split]) >= rank(excel_path):
+            continue
+        chosen[split] = excel_path
+    for split, excel_path in sorted(chosen.items()):
+        logger.info(f"Gold for {split}: {excel_path}")
+        df_excel = pd.read_excel(excel_path)
+        for _, row in df_excel.iterrows():
+            schema = row.get("CleanSchema", "")
+            if pd.isna(schema): schema = ""
+            excel_data[(split, row["DataID"])] = {
+                "CleanSchema": schema,
+                "GraphQLQueryVariables": row.get("GraphQLQueryVariables", ""),
+                "QueryCategory": row.get("QueryCategory", "Unknown")
+            }
+    if not excel_data:
+        logger.error("No usable testset xlsx in 2026_evals/. See 2026_evals/README.md.")
+        return
 
     results = {}
     
@@ -88,14 +120,22 @@ def evaluate_2024_folder(input_folder: str):
             if pk not in results:
                 results[pk] = {}
         
+        pred_split = split_of_pred(jsonl_path)
+        if pred_split is None:
+            logger.error(f"Skipping {jsonl_path}: name must start with "
+                         f"{' or '.join(sorted(SPLIT_OF_XLSX))} so its split is known.")
+            continue
+
         for pred in predictions:
             pred_id = pred.get("id")
-            if pred_id not in excel_data:
-                logger.warning(f"ID {pred_id} not found in excel.")
+            if (pred_split, pred_id) not in excel_data:
+                logger.warning(f"ID {pred_id} not found in {pred_split} gold.")
                 continue
-                
-            meta = excel_data[pred_id]
+
+            meta = excel_data[(pred_split, pred_id)]
             category = meta["QueryCategory"]
+            if pd.isna(category): category = "Unknown"
+            else: category = str(category).strip()
             
             for pk in pred_keys:
                 init_category(results[pk], category)
@@ -105,6 +145,8 @@ def evaluate_2024_folder(input_folder: str):
                 
                 schema_content = str(meta["CleanSchema"])
                 var_content = meta["GraphQLQueryVariables"]
+                if pd.isna(var_content) or not str(var_content).strip():
+                    var_content = "{}"
                 gold_query = pred.get("gold", "")
                 pred_query = pred.get(pk, "")
                 
@@ -151,7 +193,7 @@ def evaluate_2024_folder(input_folder: str):
 
     combined_results = {pk: format_results(results[pk]) for pk in results.keys()}
     
-    output_dir = os.path.join("2024_results", input_folder)
+    output_dir = os.path.join("2026_results", input_folder)
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, "results.json")
     
@@ -160,9 +202,18 @@ def evaluate_2024_folder(input_folder: str):
         
     logger.info(f"Evaluation complete. Results saved to {output_path}")
 
-if __name__ == "__main__":
+def main(argv=None):
+    """Console entry point: rgeval-score-2026."""
     import argparse
-    parser = argparse.ArgumentParser(description="Evaluate 2024 predictions")
-    parser.add_argument("--input_folder", type=str, required=True, help="Folder name inside 2024_input")
-    args = parser.parse_args()
-    evaluate_2024_folder(args.input_folder)
+
+    parser = argparse.ArgumentParser(
+        prog="rgeval-score-2026",
+        description="Score predictions against the 2026 benchmark.")
+    parser.add_argument("--input_folder", required=True,
+                        help="folder name inside 2026_input/ holding the prediction jsonl")
+    args = parser.parse_args(argv)
+    evaluate_2026_folder(args.input_folder)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,20 +1,17 @@
 import os
 import shutil
-import sys
 import re
 from typing import List, Set
-
 import pandas as pd
 from graphql import build_schema
 
-
 ALLOWED_DIRECTIVES: Set[str] = {
+    # Standard GraphQL directives we are willing to keep
     "deprecated",
     "include",
     "skip",
     "specifiedBy",
 }
-
 
 def clean_schema(raw: str) -> str:
     """
@@ -35,12 +32,14 @@ def clean_schema(raw: str) -> str:
     in_triple_quotes = False
     in_removed_directive_block = False
 
+    # Regex to find directives
     directive_pattern = re.compile(r"@([A-Za-z_][A-Za-z0-9_]*)(\s*\([^)]*\))?")
 
     for line in lines:
         original_line = line
         stripped = line.strip()
 
+        # Handle triple-quoted blocks (remove them entirely)
         if '"""' in stripped:
             quote_count = stripped.count('"""')
             for _ in range(quote_count):
@@ -49,11 +48,13 @@ def clean_schema(raw: str) -> str:
         if in_triple_quotes:
             continue
 
+        # If we're inside a removed directive argument block, skip lines until we see a closing parenthesis
         if in_removed_directive_block:
             if ")" in stripped:
                 in_removed_directive_block = False
             continue
 
+        # If this line starts with a directive and it's not allowed, skip this entire block
         if stripped.startswith("@"):
             m = re.match(r"@([A-Za-z_][A-Za-z0-9_]*)", stripped)
             if m:
@@ -63,6 +64,7 @@ def clean_schema(raw: str) -> str:
                         in_removed_directive_block = True
                     continue
 
+        # Skip obvious SQL/configuration lines
         lower = stripped.lower()
         sql_keywords = (
             "select ",
@@ -88,9 +90,11 @@ def clean_schema(raw: str) -> str:
         ):
             continue
 
+        # Drop dangling commas
         if stripped.startswith(","):
             continue
 
+        # Strip unknown directives that might appear inline
         def _strip_directive(match: re.Match) -> str:
             name = match.group(1)
             if name in ALLOWED_DIRECTIVES:
@@ -107,6 +111,7 @@ def clean_schema(raw: str) -> str:
 
     cleaned = "\n".join(cleaned_lines).strip()
     
+    # Add missing scalar definitions if Date or DateTime is used but not defined
     has_date_scalar = re.search(r'scalar\s+Date\b', cleaned, re.IGNORECASE)
     has_datetime_scalar = re.search(r'scalar\s+DateTime\b', cleaned, re.IGNORECASE)
     
@@ -124,75 +129,70 @@ def clean_schema(raw: str) -> str:
     
     return cleaned
 
-def load_schema_from_file(schema_name: str, schemas_dir: str) -> str:
-    schema_folder = os.path.join(schemas_dir, schema_name)
-    schema_file = os.path.join(schema_folder, "index.graphql")
-    
-    if os.path.isfile(schema_file):
-        try:
-            with open(schema_file, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            return ""
-    else:
-        return ""
+def process_new_dataset(file_path: str):
+    print(f"Reading file: {file_path}")
+    df = pd.read_excel(file_path)
 
-def replace_refined_schemas_with_index_files(df: pd.DataFrame, schemas_dir: str) -> pd.DataFrame:
-    if "GraphQLSchemaName" not in df.columns:
-        raise KeyError("GraphQLSchemaName not found")
-    
-    schema_cache = {}
-    
-    for idx, row in df.iterrows():
-        schema_name = row.get('GraphQLSchemaName')
-        if pd.isna(schema_name) or not str(schema_name).strip():
-            continue
-        
-        schema_name_str = str(schema_name).strip()
-        if schema_name_str not in schema_cache:
-            schema_content = load_schema_from_file(schema_name_str, schemas_dir)
-            if schema_content:
-                schema_cache[schema_name_str] = schema_content
-        
-        if schema_name_str in schema_cache:
-            df.at[idx, 'RefinedGraphQLSchema'] = schema_cache[schema_name_str]
-    
-    return df
+    # Check if 'Refined_Schema' column is present
+    if "Refined_Schema" not in df.columns:
+        raise KeyError("Could not find 'Refined_Schema' column in the dataset.")
 
-def process_file(input_path: str):
-    df = pd.read_excel(input_path)
-
-    schemas_dir = "/home/keya-b/DEV/complex-graphql-query-generator-tool/schemas"
-    df = replace_refined_schemas_with_index_files(df, schemas_dir)
-    
-    if "RefinedGraphQLSchema" not in df.columns:
-        raise KeyError("RefinedGraphQLSchema not found in dataframe")
-        
-    cleaned_schemas = []
-    validation_errors = []
-    
-    for idx, raw in df["RefinedGraphQLSchema"].items():
-        cleaned = clean_schema(raw)
-        try:
-            if cleaned:
-                build_schema(cleaned)
-        except Exception as e:
-            validation_errors.append((idx, str(e)))
-        cleaned_schemas.append(cleaned)
-        
-    print(f"Total rows processed: {len(cleaned_schemas)}")
-    print(f"Validation errors: {len(validation_errors)}")
-    if validation_errors:
-        print("First 10 errors:", validation_errors[:10])
-
+    # Check if 'CleanSchema' already exists. If so, drop it to prevent duplicate inserts.
     if "CleanSchema" in df.columns:
+        print("Warning: 'CleanSchema' column already exists and will be overwritten.")
         df = df.drop(columns=["CleanSchema"])
 
-    refined_col_idx = df.columns.get_loc("RefinedGraphQLSchema")
+    cleaned_schemas = []
+    validation_errors = []
+
+    print("Cleaning schemas and verifying compliance...")
+    for idx, raw in df["Refined_Schema"].items():
+        if pd.isna(raw) or not str(raw).strip():
+            cleaned_schemas.append("")
+            continue
+            
+        cleaned = clean_schema(raw)
+        
+        # Test compliance with graphql.build_schema
+        try:
+            build_schema(cleaned)
+        except Exception as e:
+            validation_errors.append((idx, str(e)))
+            print(f"❌ Row {idx} validation failed: {e}")
+            
+        cleaned_schemas.append(cleaned)
+
+    # Place CleanSchema right after the Refined_Schema column
+    refined_col_idx = df.columns.get_loc("Refined_Schema")
     df.insert(refined_col_idx + 1, "CleanSchema", cleaned_schemas)
+
+    # Assert all unique non-empty cleaned schemas compile correctly
+    if validation_errors:
+        print(f"\n❌ Validation check failed with {len(validation_errors)} errors.")
+        print("Dataset will not be saved.")
+        return False
+    else:
+        print("\n✅ Verification passed: All cleaned schemas are 100% GraphQL SDL-compliant!")
+
+    # Write back to excel without modifying anything else
+    backup_path = file_path + ".bak"
+    shutil.copy2(file_path, backup_path)
+    print(f"Backup created at: {backup_path}")
+
+    df.to_excel(file_path, index=False)
+    print(f"✅ Successfully wrote clean schemas back to {file_path}")
     
-    df.to_excel(input_path, index=False)
-    print("Done writing back to excel.")
+    # Remove backup upon success
+    os.remove(backup_path)
+    return True
 
 if __name__ == "__main__":
-    process_file("test_part2.xlsx")
+    import sys
+
+    if len(sys.argv) != 2:
+        sys.exit("usage: python -m rgeval.clean_new_dataset <dataset.xlsx>")
+    target_file = sys.argv[1]
+    if os.path.exists(target_file):
+        process_new_dataset(target_file)
+    else:
+        print(f"Error: Target file not found at {target_file}")

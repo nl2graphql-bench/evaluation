@@ -3,12 +3,12 @@ import json
 import logging
 import pandas as pd
 from datetime import datetime
-from pipeline.AST import process_queries
-from pipeline.normalizeAST import process_asts
-from pipeline.graphNet import get_graph_dict_from_ast
-from pipeline.cycles import process_graphs
-import pipeline.newRed as newRed
-from pipeline.compare_jsons import compare_leaf_nodes
+from .pipeline.AST import process_queries
+from .pipeline.normalizeAST import process_asts
+from .pipeline.graphNet import get_graph_dict_from_ast
+from .pipeline.cycles import process_graphs
+from .pipeline import newRed
+from .pipeline.compare_jsons import compare_leaf_nodes
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

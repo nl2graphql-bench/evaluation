@@ -520,7 +520,11 @@ def process_csv_from_preprocessed_file(input_path, threshold: int = 0, output_di
     return processed_files
 
 if __name__ == "__main__":
-    input_file = 'test_input_files/ZeroShot_ibm_granite-20b-code-instruct-op_1164 (1).csv'
+    import sys
+
+    if len(sys.argv) != 2:
+        sys.exit("usage: python -m rgeval.pipeline.preProcessor <predictions.csv|.xlsx>")
+    input_file = sys.argv[1]
 
     temp = process_csv_from_preprocessed_file(input_file)
     print(temp)
