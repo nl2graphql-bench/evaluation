@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rgeval"
+version = "0.1.0"
+description = "Semantic-equivalence scoring for generated GraphQL queries"
+readme = "README.md"
+requires-python = ">=3.9"
+license-files = ["LICENSE.txt"]
+authors = [
+  { name = "Keya Battu" },
+  { name = "Parth Mehta" },
+  { name = "Harikrishnan Balagopal" },
+  { name = "Manish Kesarwani" },
+]
+keywords = ["graphql", "nl2graphql", "evaluation", "benchmark", "text-to-graphql"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  # networkx must stay below 3.0: the graph code uses APIs removed in 3.x.
+  "networkx>=2.8,<3",
+  # graphql-core must stay below 3.3: from 3.3 a node's `directives` is None
+  # when absent, where 3.2 gave [], and pipeline/normalizeAST.py iterates it
+  # directly (TypeError: 'NoneType' object is not iterable).
+  "graphql-core>=3.2,<3.3",
+  # pipeline/newRed.py and pipeline/preProcessor.py read YAML config.
+  "pyyaml>=6.0",
+  # pipeline/graphNet.py and pipeline/Graph.py import pyplot at module level.
+  "matplotlib>=3.5",
+]
+
+[project.optional-dependencies]
+# Reading the benchmark xlsx files and running the dataset preparation scripts.
+datasets = ["pandas>=2.0", "openpyxl>=3.1"]
+# app.py, the local UI for inspecting a scored run.
+ui = ["fastapi>=0.100", "uvicorn>=0.23"]
+dev = ["pytest>=7", "build>=1.0", "twine>=5.0"]
+
+[project.urls]
+Homepage = "https://nl2graphql-bench.github.io/"
+Repository = "https://github.com/nl2graphql-bench/evaluation"
+Datasets = "https://github.com/nl2graphql-bench/datasets"
+Issues = "https://github.com/nl2graphql-bench/evaluation/issues"
+
+[project.scripts]
+rgeval-score-2026 = "rgeval.eval_2026:main"
+rgeval-score-2024 = "rgeval.eval_2024:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rgeval"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/rgeval", "tests", "README.md", "LICENSE.txt", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
