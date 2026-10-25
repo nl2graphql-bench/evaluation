@@ -1,0 +1,7 @@
+# RGEval depends on graphql-core for SDL parsing and query validation, and on
+# networkx for the graph comparison. networkx must stay below 3.0: the graph
+# code uses APIs removed in 3.x.
+graphql-core>=3.2,<4
+networkx>=2.8,<3
+pandas>=2.0
+openpyxl>=3.1

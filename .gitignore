@@ -1,0 +1,42 @@
+# NEVER commit the hidden benchmark. It must not be uploaded anywhere - not to a
+# public repo, not to a private one. Its only permitted locations are local disk
+# and the internal evaluation server. It is what leaderboard submissions are
+# scored against, so if it were public a model could be tuned on it.
+secret_data.jsonl
+secret_dataset*
+secret_*
+*hidden*
+
+# No datasets or model predictions in this repo. Datasets live in
+# nl2graphql-bench/datasets; predictions are an input you supply locally.
+*.jsonl
+*.jsonl.gz
+*.xlsx
+*.parquet
+*.csv
+2026_evals/
+2026_input/
+2026_results/
+2024_evals/
+emnlp_inputs/
+emnlp_outputs/
+every_prediction/
+review_evals/
+test_input_files/
+test_output_files/
+
+# Never commit a virtualenv or credentials.
+.venv/
+venv/
+env/
+.env
+*.pem
+*.key
+credentials.json
+config.local.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
