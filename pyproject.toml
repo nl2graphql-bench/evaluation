@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "Semantic-equivalence scoring for generated GraphQL queries"
 readme = "README.md"
 requires-python = ">=3.9"
-license-files = ["LICENSE.txt"]
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
   { name = "Keya Battu" },
   { name = "Parth Mehta" },
@@ -19,6 +20,7 @@ keywords = ["graphql", "nl2graphql", "evaluation", "benchmark", "text-to-graphql
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -61,7 +63,7 @@ rgeval-score-2024 = "rgeval.eval_2024:main"
 packages = ["src/rgeval"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/rgeval", "tests", "README.md", "LICENSE.txt", "pyproject.toml"]
+include = ["src/rgeval", "tests", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

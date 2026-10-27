@@ -1,0 +1,20 @@
+License provenance
+==================
+
+This repository is MIT licensed, matching the other NL2GraphQL Bench
+components:
+
+  https://github.com/nl2graphql-bench/datasets      MIT
+  https://github.com/nl2graphql-bench/generation    MIT
+  https://github.com/nl2graphql-bench/index         MIT
+
+and the upstream dataset this work builds on:
+
+  https://github.com/stepzen-dev/NL2GQL             MIT, Copyright (c) 2024 StepZen
+
+The source repository `keya-x/eval-pipeline` carried CC BY-NC-ND 4.0. That is
+not an OSI-approved open-source license and is unsuitable for a package people
+install and run: NonCommercial bars use inside a company, which is most of the
+audience for an enterprise GraphQL benchmark, and NoDerivatives bars forks and
+patches, so a user cannot fix a bug and contribute it back. Creative Commons
+itself recommends against applying its licenses to software.
