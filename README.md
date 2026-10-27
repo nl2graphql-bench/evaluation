@@ -112,8 +112,8 @@ GraphQL APIs. EMNLP 2026, Industry Track.
 
 ## License
 
-See `LICENSE.txt`. It is CC BY-NC-ND 4.0, carried over from the source
-repository. That is a poor fit for an installable library (NonCommercial and
-NoDerivatives both restrict normal use of a package people run and extend) and
-differs from the MIT used by the datasets and generation components. Changing it
-is the authors' decision and is being handled separately.
+MIT, see `LICENSE`. `NOTICE` records why: the source repository carried
+CC BY-NC-ND 4.0, which is not an OSI-approved open-source license and bars both
+commercial use and derivative works, neither of which suits a package people
+install and extend. The other NL2GraphQL Bench components and the upstream
+StepZen dataset are all MIT.
