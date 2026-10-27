@@ -220,23 +220,21 @@ __marimo__/
 .streamlit/secrets.toml
 
 # ---------------------------------------------------------------------------
-# Project-specific: things that must never be committed here
+# Project-specific
 # ---------------------------------------------------------------------------
-# The hidden benchmark must not be uploaded anywhere, public or private. Its
-# only permitted locations are local disk and the internal evaluation server:
-# it is what leaderboard submissions are scored against, so if it were public a
-# model could be tuned on it and the score would mean nothing.
-secret_data.jsonl
-secret_dataset*
-secret_*
-*hidden*
+# Generated at build time by hatch-vcs from the git tag. Committing it makes the
+# tree dirty after every build, and setuptools_scm then reports a .dev version
+# instead of the tag.
+src/rgeval/_version.py
 
 # No datasets or model predictions in this repo. Datasets live in
-# nl2graphql-bench/datasets; predictions are an input you supply locally.
+# https://github.com/nl2graphql-bench/datasets; predictions are an input the
+# user supplies, and scoring writes its own output directories.
 *.jsonl
 *.jsonl.gz
 *.xlsx
 *.parquet
+*.csv
 2026_evals/
 2026_input/
 2026_results/
@@ -249,6 +247,13 @@ every_prediction/
 review_evals/
 test_input_files/
 test_output_files/
+
+# The 2,100-row hidden benchmark must never be committed anywhere, public or
+# private: it is what leaderboard submissions are scored against.
+secret_data.jsonl
+secret_dataset*
+secret_*
+*hidden*
 
 # Credentials
 credentials.json

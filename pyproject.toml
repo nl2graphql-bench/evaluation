@@ -1,10 +1,12 @@
 [build-system]
-requires = ["hatchling>=1.21"]
+requires = ["hatchling>=1.21", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
 
 [project]
 name = "rgeval"
-version = "0.1.0"
+# Version comes from the git tag via hatch-vcs, so a release cannot publish a
+# number that disagrees with the tag it was cut from. Do not hardcode it here.
+dynamic = ["version"]
 description = "Semantic-equivalence scoring for generated GraphQL queries"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -58,6 +60,15 @@ Issues = "https://github.com/nl2graphql-bench/evaluation/issues"
 [project.scripts]
 rgeval-score-2026 = "rgeval.eval_2026:main"
 rgeval-score-2024 = "rgeval.eval_2024:main"
+
+[tool.hatch.version]
+source = "vcs"
+# Tags are v-prefixed: v0.1.0 -> 0.1.0
+tag-pattern = "v(?P<version>.+)"
+
+[tool.hatch.build.hooks.vcs]
+# Generated at build time; the package reads its version from here.
+version-file = "src/rgeval/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rgeval"]

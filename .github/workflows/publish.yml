@@ -1,46 +1,93 @@
 name: publish
 
-# Publishes to PyPI when a GitHub release is published, using Trusted
-# Publishing (OIDC). No API token is stored anywhere: PyPI verifies the
-# workflow's identity directly.
+# Publishes to PyPI using Trusted Publishing (OIDC). No API token is stored in
+# the repository or in GitHub secrets: PyPI verifies this workflow's identity
+# and issues a credential that lives for minutes.
 #
 # Requires a publisher registered at https://pypi.org/manage/account/publishing/
 #   PyPI project name : rgeval
 #   Owner             : nl2graphql-bench
 #   Repository        : evaluation
 #   Workflow          : publish.yml
-#   Environment       : pypi
+#   Environment       : pypi   (and testpypi, registered separately on test.pypi.org)
+#
+# The version published comes from the git tag via hatch-vcs, so a release
+# cannot publish a number that disagrees with the tag it was cut from.
+#
+# Third-party actions are pinned to a commit SHA, not a tag. A tag can be moved
+# to point at different code; a SHA cannot. The readable version is in the
+# trailing comment, which is what to bump when updating.
 
 on:
   release:
     types: [published]
-  workflow_dispatch:        # lets you publish without cutting a release
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where to publish
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
+
+permissions: {}            # default to nothing; each job opts in to what it needs
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          # hatch-vcs derives the version from tags, so the full history and
+          # tags must be present. A shallow clone yields a 0.1.dev0 version.
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
       - run: python -m pip install --upgrade build twine
       - run: python -m build
-      - run: twine check dist/*
-      - uses: actions/upload-artifact@v4
+      - run: twine check --strict dist/*
+      - name: Show the version that will be published
+        run: ls -1 dist/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: dist
           path: dist/
 
-  publish:
+  # Dry run first. TestPyPI accepts the same distribution, so a broken release
+  # is caught before a version number is burned on the real index: a version can
+  # never be reused on PyPI, even after the release is deleted.
+  testpypi:
     needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'
     runs-on: ubuntu-latest
-    environment: pypi        # add a required reviewer here to gate uploads
+    environment: testpypi
     permissions:
-      id-token: write        # mandatory for Trusted Publishing
+      id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  pypi:
+    needs: build
+    # Only from a published release, or an explicit dispatch asking for pypi.
+    # Releases are cut from a tag, so this cannot publish arbitrary branch code
+    # by accident.
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')
+    runs-on: ubuntu-latest
+    environment: pypi        # add a required reviewer here to gate every upload
+    permissions:
+      id-token: write        # mandatory for Trusted Publishing
+      attestations: write    # signs the distributions with build provenance
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
