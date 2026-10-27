@@ -1,0 +1,46 @@
+name: publish
+
+# Publishes to PyPI when a GitHub release is published, using Trusted
+# Publishing (OIDC). No API token is stored anywhere: PyPI verifies the
+# workflow's identity directly.
+#
+# Requires a publisher registered at https://pypi.org/manage/account/publishing/
+#   PyPI project name : rgeval
+#   Owner             : nl2graphql-bench
+#   Repository        : evaluation
+#   Workflow          : publish.yml
+#   Environment       : pypi
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:        # lets you publish without cutting a release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --upgrade build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi        # add a required reviewer here to gate uploads
+    permissions:
+      id-token: write        # mandatory for Trusted Publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
