@@ -255,3 +255,4 @@ credentials.json
 config.local.yaml
 *.pem
 *.key
+src/rgeval/_version.py
